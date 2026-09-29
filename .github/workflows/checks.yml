@@ -1,0 +1,30 @@
+name: Source checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build with installed Visual Studio Roslyn
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $install = & $vswhere -latest -products '*' -property installationPath
+          if (!$install) { throw 'Visual Studio not found' }
+          & ./pipeline/build.ps1 -Compiler (Join-Path $install 'MSBuild\Current\Bin\Roslyn\csc.exe')
+      - name: Exporter self-test
+        shell: pwsh
+        run: |
+          & ./pipeline/bin/JumpConvert.exe self-test
+          if ($LASTEXITCODE -ne 0) { throw 'Exporter self-test failed' }
+      - name: Synthetic geometry tests
+        run: python -m unittest discover -s pipeline/tests -v
+      - name: Public distribution checks
+        run: python tools/check_distribution.py
