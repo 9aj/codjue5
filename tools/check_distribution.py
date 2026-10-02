@@ -2,7 +2,9 @@
 from pathlib import Path
 import re,subprocess,sys
 root=Path(__file__).resolve().parents[1]
-result=subprocess.run(['git','ls-files','-z'],cwd=root,capture_output=True,check=True)
+arguments=['git','ls-files','-z']
+if '--include-untracked' in sys.argv:arguments+=['--cached','--others','--exclude-standard']
+result=subprocess.run(arguments,cwd=root,capture_output=True,check=True)
 names=[n for n in result.stdout.decode().split('\0') if n]
 assert names,'Stage the source files first, then run the distribution check'
 blocked={'.ff','.iwd','.iwi','.uasset','.umap','.obj','.fbx','.bin','.exe','.dll','.zip','.7z','.png','.jpg','.jpeg','.pem','.key'}

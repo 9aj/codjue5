@@ -10,10 +10,13 @@ From the repository root:
 & .\pipeline\build.ps1
 & .\pipeline\bin\JumpConvert.exe self-test
 python -m unittest discover -s pipeline/tests -v
+python -m unittest discover -s map_pipeline/tests -v
 python tools/check_distribution.py
 ```
 
 Use Python 3.10 or later. The optional Descent material-coverage test is explicitly skipped when its private fixture is absent; the synthetic geometry tests still run. Passing these checks does not test a live game capture or an Unreal import.
+
+To check new, unstaged source files too, run `python tools/check_distribution.py --include-untracked`. Create an isolated Unreal project with `python map_pipeline/tests/create_unreal_fixture.py`, build its editor target, and import `map_pipeline/examples/fixture.map` using `pipeline/import-map.ps1`. The `CodMapRuntime.Teleport.DelayAndFeet` Unreal automation test exercises actual overlap, delay, feet positioning and cooldown. Never run fixture commands against a production project's unsaved editor session.
 
 Before proposing a new game build or map profile, document the executable/map hashes, layout evidence, bounds checks, expected failure behaviour and validation performed. Do not loosen memory bounds, remove map identity checks or silently fall back to guessed offsets.
 

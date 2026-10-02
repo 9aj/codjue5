@@ -26,3 +26,5 @@ pipeline/bin/
 .vs/
 .idea/
 local.*
+unreal/**/Binaries/
+unreal/**/Intermediate/

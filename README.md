@@ -1,10 +1,52 @@
 # codjue5 — Call of Duty 4 maps to Unreal Engine 5
 
-A source-built COD4 geometry exporter and a documented workflow for bringing authorised custom maps into UE5. Developed during the Project Jump conversions of `mp_descent` and `mp_tunnel`.
+A PowerShell pipeline for dumping COD4 maps through IW3xo and importing them into Unreal Engine 5.
 
-**Start here: [step-by-step conversion guide](docs/CONVERSION_GUIDE.md).**
+```powershell
+./codue5 mp_mymapname
+```
 
-The reusable exporter produces geometry, neutral material slots and entity metadata. A finished playable port also needs collision reconstruction, models, gameplay logic, materials and playtesting. Those later stages were validated for specific maps; this is **not a universal one-click map converter**.
+On the first run, enter your CoD4 folder, Unreal `.uproject` and `UnrealEditor.exe` paths. Setup saves them locally, enables Unreal Python, builds the teleport runtime, and builds the modified IW3xo exporter if your DLL needs it. Subsequent maps need only their name.
+
+The command launches `3xp_cj`, loads the map, exports all collision geometry/entities/model placements, saves and validates a fresh `.map`, closes the game, imports an independent mesh and actor for every brush and patch, verifies the saved Unreal level, then opens it.
+
+## Get started
+
+Install these once:
+
+- CoD4 with the full [IW3xo package](https://github.com/xoxor4d/iw3xo-dev/releases), your maps and the `3xp_cj` mod.
+- Unreal Engine and a **C++ project**. For an existing Blueprint project, add a C++ class in Unreal once.
+- Python 3.10+ on PATH, Git and Visual Studio C++ Build Tools with a Windows SDK. Unreal may also require the .NET Framework Developer Pack.
+
+Then:
+
+```powershell
+git clone https://github.com/9aj/codjue5.git
+cd codjue5
+./codue5 mp_mymapname
+```
+
+Save and close the destination Unreal project and CoD4 before running. If PowerShell blocks local scripts, enable scripts for this terminal session with `Set-ExecutionPolicy -Scope Process Bypass`.
+
+Optional commands:
+
+```powershell
+./codue5 -SetupOnly                  # Configure/build without importing a map
+./codue5 mp_mymapname -DryRun        # Show saved paths without launching anything
+./codue5 mp_mymapname -NoOpen        # Import and verify, leave Unreal closed
+./codue5 mp_mymapname -LeaveGameOpen # Keep CoD4 open after a successful dump
+./codue5 -SetupOnly -Mod other_mod  # Change the installed mod folder
+```
+
+Settings live in ignored `local.codue5.json`. Override paths with `-Cod4Root`, `-Project` or `-Editor`; rerun `-SetupOnly` when changing projects. Optional map settings load automatically from ignored `local.maps/<mapname>.json`. Copy `map_pipeline/examples/config.json` there and replace its demonstration values to configure textures, sky, models and script-driven teleports. `-Config` selects another file.
+
+Brush UVs and patch UVs use the data available in the reconstructed export. Missing original textures/UVs, render-only geometry and arbitrary GSC logic cannot be recovered by this command. Missing assets and unsupported gameplay are reported; configured teleports run through the included native plugin. Playtest the result with your own pawn and movement system.
+
+See the [pipeline guide](docs/MAP_PIPELINE.md) for collision options, asset extraction, setup troubleshooting and lower-level `Import_Map.cmd` usage. The pinned modified exporter source is [published in the IW3xo fork](https://github.com/9aj/iw3xo-dev/tree/5b1b57e5e48764783a223e891ca1573d040690ea); setup clones/builds it into ignored `artifacts/` and preserves the previous DLL before installing it.
+
+**Live COD4 export: [step-by-step conversion guide](docs/CONVERSION_GUIDE.md).**
+
+The direct `.map` pipeline handles geometry, collision, lighting, configured materials/models and teleport bindings without map-specific importer code. Arbitrary GSC gameplay and missing source asset data still require configuration or implementation and playtesting. The older live-game exporter remains available separately.
 
 No game, map, texture, captured model, Unreal project or compiled tool binary is included. Use your own installation and maps you have permission to convert. Map permission and third-party model/texture permissions are separate from this tool's license.
 
@@ -12,6 +54,8 @@ No game, map, texture, captured model, Unreal project or compiled tool binary is
 
 | Component | Status |
 |---|---|
+| Direct Radiant .map pipeline | Independent brush/patch actors, per-object collision, materials, lighting, six-face sky, configured model/teleport bindings, resumable import and saved-level verification |
+| CodMapRuntime Unreal plugin | Native per-pawn teleport delay, capsule feet offset and shared cooldown; C++ source included |
 | C2M/Husky-derived COD4 world exporter | Buildable C# source; reads supported `iw3mp` layouts and rejects unrecognised layouts |
 | Inventory, hashes, OBJ validation and neutral material preparation | Runnable PowerShell / C# commands |
 | Static-model buffer capture | Separate command; LOD0 decoding demonstrated on Tunnel |
@@ -20,7 +64,7 @@ No game, map, texture, captured model, Unreal project or compiled tool binary is
 | Render partition / surface grouping algorithms | Python source and synthetic tests; historical Descent CLI defaults |
 | Finished map / Project Jump movement system | Not distributed |
 
-## Quick start: export only
+## Older live-game exporter
 
 Prerequisites: Windows x64, Windows PowerShell, .NET Framework 4.7.2 or later, a modern Visual Studio Roslyn C# compiler, and COD4 with your map loaded locally. Python 3.10+ is used for the optional geometry tests/reference scripts; Unreal's Python scripts run inside Unreal.
 

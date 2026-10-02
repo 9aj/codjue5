@@ -26,5 +26,15 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Exporter self-test failed' }
       - name: Synthetic geometry tests
         run: python -m unittest discover -s pipeline/tests -v
+      - name: Map pipeline tests
+        run: python -m unittest discover -s map_pipeline/tests -v
+      - name: PowerShell syntax
+        shell: pwsh
+        run: |
+          foreach ($script in Get-ChildItem -Path ./codue5.ps1,./pipeline/*.ps1) {
+            $tokens = $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($script.FullName,[ref]$tokens,[ref]$errors) | Out-Null
+            if ($errors.Count) { throw ($errors | Out-String) }
+          }
       - name: Public distribution checks
         run: python tools/check_distribution.py
