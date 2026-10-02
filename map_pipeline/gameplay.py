@@ -75,6 +75,8 @@ def resolve_gameplay(entities,objects,config,scale):
             delay=float(binding.get('delay',0));cooldown=float(binding.get('cooldown',0.5))
             if not 0<=delay<=60 or not 0<=cooldown<=60:raise MapError('Invalid teleport timing')
             teleports.append({'object_id':obj['id'],'target':target,'destination_cm':point_cm(numbers(props['origin'],3),scale),'destination_angles':[-angles[0],-angles[1],angles[2]],'set_view':bool(binding.get('set_view',False)),'delay':delay,'cooldown':cooldown})
+            if config.get('profile')=='project_jump' and binding.get('set_view'):
+                unresolved.append({'object':obj['id'],'reason':'Actor destination rotation is imported; forced controller/view rotation belongs to the game and is not called by map Blueprints'})
     for obj in objects:
         if obj['semantic']=='trigger' and obj['id'] not in used:unresolved.append({'object':obj['id'],'entity':obj['entity'],'reason':'Trigger has no supported gameplay binding'})
         if obj['semantic']=='ladder':unresolved.append({'object':obj['id'],'reason':'Ladder movement requires a project adapter'})

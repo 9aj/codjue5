@@ -2,14 +2,14 @@
   "units_to_cm": 2.54,
   "patch_subdivisions": 8,
   "allow_fallback_hulls": false,
-  "surface_collision": "triangles",
+  "surface_collision": "dop26",
   "ambient_emission": 0.15,
   "nanite": false,
   "materials": {
     "stone": {"color": [0.5, 0.5, 0.5], "roughness": 0.8}
   },
   "teleports": [
-    {"trigger": "portal", "target": "destination", "delay": 0.1, "set_view": true, "cooldown": 0.5}
+    {"trigger": "portal", "target": "destination", "delay": 0.1, "set_view": false, "cooldown": 0.5}
   ],
   "models": {},
   "object_overrides": {}

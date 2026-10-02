@@ -187,7 +187,7 @@ def prepare(source,output,config=None):
                 mats=[mat]*len(faces);uvs=[[uvs[i] for i in f] for f in faces]
                 shape='surface';uv_mode='source_mesh_uv'
             sem=semantic(obj,mats)
-            collision='none' if sem in ('noncolliding','sky','trigger','ladder') else 'box' if shape=='box' else 'convex' if shape=='convex' else config.get('surface_collision','triangles')
+            collision='none' if sem in ('noncolliding','sky','trigger','ladder') else 'box' if shape=='box' else 'convex' if shape=='convex' else config.get('surface_collision','dop26' if config.get('profile')=='project_jump' else 'triangles')
             if collision not in ('none','box','convex','triangles','dop26'):raise MapError('Invalid surface collision policy')
             override=config.get('object_overrides',{}).get(obj['id'],{})
             collision=override.get('collision',collision)
@@ -199,6 +199,7 @@ def prepare(source,output,config=None):
         except (ValueError,StopIteration,OverflowError) as exc:
             issues.append({'id':obj['id'],'source_line':obj['line'],'reason':str(exc) or type(exc).__name__})
     materials={}
+    for row in records:row['slick']=bool(config.get('object_overrides',{}).get(row['id'],{}).get('slick',False))
     for name,asset_id in material_ids.items():
         spec=dict(config.get('materials',{}).get(name,{}))
         if not spec and not tool_material(name):

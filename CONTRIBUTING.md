@@ -23,3 +23,5 @@ Before proposing a new game build or map profile, document the executable/map ha
 Keep visible geometry, collision and gameplay changes separate and reviewable. New CLI stages should take explicit input/output paths, avoid overwriting earlier runs and write a machine-readable status/report. New reusable helpers must not depend on a private Project Jump folder or Blueprint.
 
 Preserve all upstream copyright notices. Describe modifications to vendored code in `pipeline/NOTICE.md` and credit new dependencies in `CREDITS.md`. Contributions to project-authored code and documentation use GPL-3.0-or-later, consistent with the existing derived tool.
+
+Project Jump regression tests cover content-only plugin ownership, layout and prohibited collision/scale settings. Validate and package a synthetic content plugin with the actual kit before changing its Blueprint generator. The isolated `CodMapRuntime.ContentOnlyTeleport` automation test accepts `-CodJueTeleportTestClass=/Plugin/Generated/Gameplay/BP_Name.BP_Name_C` to exercise a generated Blueprint. Keep that C++ test harness in the isolated fixture project; never add CodMapRuntime to a Project Jump map pack.

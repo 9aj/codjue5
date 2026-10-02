@@ -43,7 +43,7 @@ def validate(path):
 def main():
     parser=argparse.ArgumentParser(description='COD4 .map to independent UE actors/assets')
     commands=parser.add_subparsers(dest='command',required=True)
-    p=commands.add_parser('prepare');p.add_argument('source');p.add_argument('--output',required=True);p.add_argument('--config');p.add_argument('--allow-partial',action='store_true')
+    p=commands.add_parser('prepare');p.add_argument('source');p.add_argument('--output',required=True);p.add_argument('--config');p.add_argument('--profile',choices=['generic','project_jump']);p.add_argument('--map-id');p.add_argument('--allow-partial',action='store_true')
     p=commands.add_parser('validate');p.add_argument('manifest')
     p=commands.add_parser('extract-assets');p.add_argument('source');p.add_argument('--output',required=True)
     args=parser.parse_args()
@@ -53,7 +53,10 @@ def main():
             report=extract_assets(args.source,args.output)
             print(json.dumps({'extracted':len(report['extracted']),'unsupported':len(report['unsupported'])}));return 0
         if args.command=='prepare':
-            data=prepare(args.source,args.output,read_config(args.config))
+            config=read_config(args.config)
+            if args.profile:config['profile']=args.profile
+            if args.map_id:config.setdefault('map_id',args.map_id)
+            data=prepare(args.source,args.output,config)
             print(json.dumps({'status':data['status'],'summary':data['summary'],'issues':len(data['issues']),'fallback_hulls':len(data['fallback_hulls']),'unresolved_gameplay':len(data['gameplay']['unresolved'])},indent=2))
             return 2 if data['issues'] and not args.allow_partial else 0
         data=validate(args.manifest);print(json.dumps({'status':'validated','map_id':data['map_id'],'objects':len(data['objects'])}));return 0

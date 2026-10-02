@@ -36,6 +36,12 @@ def main():
     assert len([n for n in labels if n.startswith('COD Brush_') or n.startswith('COD Patch_')])==len(data['objects'])
     for row in data['gameplay']['teleports']:
         a=labels['COD Teleport '+row['object_id']];assert a.get_attach_parent_actor()==labels['COD '+row['object_id']]
+        if data['config'].get('profile')=='project_jump':
+            from map_pipeline.project_jump import layout
+            name,_,_=layout(data)
+            assert a.get_class().get_path_name().startswith('/'+name+'/')
+            assert a.get_component_by_class(u.BoxComponent)
+            continue
         assert (a.get_editor_property('destination')-u.Vector(*row['destination_cm'])).length()<.1
         assert a.get_editor_property('delay_seconds')==row['delay'] or abs(a.get_editor_property('delay_seconds')-row['delay'])<.00001
         assert a.get_editor_property('set_view')==row['set_view']
@@ -48,6 +54,14 @@ def main():
             move_verified=True
         finally:a.set_actor_location(p,False,False)
     report.update(status='complete',saved_reload_verified=True,independent_move_verified=move_verified,verified_source_actors=len(paths),unique_render_meshes=len(set(paths)),worst_bounds_error_cm=worst)
+    if data['config'].get('profile')=='project_jump':
+        from map_pipeline.project_jump import layout
+        name,level,_=layout(data)
+        assert report['level']==level and all(p.startswith('/'+name+'/') for p in paths)
+        world=u.get_editor_subsystem(u.UnrealEditorSubsystem).get_editor_world()
+        assert world.get_world_settings().get_editor_property('kill_z')==u.get_default_object(u.WorldSettings).get_editor_property('kill_z')
+        report.update(content_only_plugin=name,project_jump_layout_verified=True,default_kill_z_verified=True,
+            review_required=['Playtest scale, bounces and CmWorld movement brushes','Place Start/Finish TimerZones and route names','Optional map card: Maps/'+name+'_Info','Run the kit PackageMod validator and cook before distribution'])
     save_json(report_path,report)
 
 

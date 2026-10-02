@@ -2,11 +2,11 @@
 
 The `map_pipeline` path reads the source map directly. Each brush and patch gets its own Static Mesh asset and actor. Moving a wall moves only that source object, including its attached teleport trigger. This path does not use a previously imported full-map mesh.
 
-The everyday entry point is `./codue5 mp_mymapname`. On first use, it asks for local paths, installs/builds the runtime and saves ignored local settings. Use `./codue5 -SetupOnly` to configure without importing, or `-DryRun` to inspect settings. The detailed commands below expose individual stages for diagnostics and custom workflows.
+The everyday entry point is `./codue5 mp_mymapname`. On first use, it asks for local paths, prepares content-only Project Jump map plugins and saves ignored local settings. Use `./codue5 -SetupOnly` to configure without importing, or `-DryRun` to inspect settings. The detailed commands below expose individual stages for diagnostics and custom workflows.
 
 ## Requirements
 
-Windows, Python 3.10+, an Unreal project with Python Editor Script Plugin enabled, and Unreal Editor. Geometry imports do not require the native runtime. Teleports require the included CodMapRuntime C++ plugin, a C++ editor target, and the compiler/SDK dependencies required by your Unreal installation. The runtime was developed against UE5.8.
+Windows, Python 3.10+, Unreal Engine 5.8.x and the supplied compiled Project Jump Map Kit. The importer enables Python transiently; it does not edit the kit project or install native map modules. Follow the [official mapping guide](https://project-jump.github.io/). The optional generic profile requires a C++ project and CodMapRuntime for teleports and is not a Project Jump mod.
 
 Save and close the destination Unreal project before importing. The command launches an isolated editor process, checkpoints the import, then launches another editor process to verify the saved level. It refuses an already open destination project.
 
@@ -15,8 +15,8 @@ Save and close the destination Unreal project before importing. The command laun
 To dump directly from an installed IW3xo client, then prepare and import that fresh snapshot:
 
 ```powershell
-.\Import_Map.cmd -Cod4Root 'C:\Games\Call of Duty 4' -MapName mp_example `
-  -Mod 3xp_cj -Project 'C:\Projects\MyGame\MyGame.uproject' `
+.\Import_Map.cmd -Profile project_jump -Cod4Root 'C:\Games\Call of Duty 4' -MapName mp_example `
+  -Mod 3xp_cj -Project 'C:\ProjectJump\MapKit\project_jump.uproject' `
   -Editor 'C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe' `
   -Config 'C:\Maps\my_map.config.json' -Open
 ```
@@ -40,8 +40,8 @@ Captures use fresh directories under `artifacts/captures`. `-CaptureOutput` sele
 To import an existing `.map` instead:
 
 ```powershell
-.\Import_Map.cmd -MapFile 'C:\Maps\my_map.map' `
-  -Project 'C:\Projects\MyGame\MyGame.uproject' `
+.\Import_Map.cmd -Profile project_jump -MapFile 'C:\Maps\my_map.map' `
+  -Project 'C:\ProjectJump\MapKit\project_jump.uproject' `
   -Editor 'C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe' `
   -Config 'C:\Maps\my_map.config.json' -Open
 ```
@@ -50,12 +50,12 @@ Config is optional. Start from `map_pipeline/examples/config.json`, replacing it
 
 The output contains a source snapshot, one OBJ per source object, `manifest.json`, editor logs and `unreal-result.json`. The default output directory is under `artifacts/map-import`. Use a different `-Output` when changing configuration or input assets: existing outputs belong to their original input fingerprint. Rerunning identical inputs resumes incomplete work and verifies completed imports again.
 
-Generated Unreal assets live under `/Game/CodMaps/<map_id>`, including `Map_<map_id>`. The importer refuses to replace an unowned level or asset. Set `map_id` explicitly to choose a stable namespace; use another ID/output when preserving an earlier conversion.
+Project Jump assets live in `Plugins/<PluginName>/Content`, with the level at `Content/Maps/<PluginName>.umap` and generated assets under `Content/Generated`. Plugin names contain letters/digits only and must remain stable after publication; `mp_example` becomes `mpexample`. Configure `plugin_name` before the first import to choose another identity. Ownership receipts refuse changed input fingerprints or unowned content, protecting manual edits. A changed-source reimport requires review rather than silently overwriting the plugin. The low-level importer defaults to `generic` for compatibility: select `-Profile project_jump` explicitly. Generic output uses `/Game/CodMaps/<map_id>`.
 
 For preparation without Unreal:
 
 ```powershell
-python -m map_pipeline prepare 'C:\Maps\my_map.map' --output artifacts/my-map --config 'C:\Maps\my_map.config.json'
+python -m map_pipeline prepare 'C:\Maps\my_map.map' --profile project_jump --map-id mp_example --output artifacts/my-map --config 'C:\Maps\my_map.config.json'
 python -m map_pipeline validate artifacts/my-map/manifest.json
 python -m map_pipeline extract-assets 'C:\Maps\my_map.iwd' --output artifacts/my-assets
 python -m map_pipeline extract-assets 'C:\Maps\my_map.ff' --output artifacts/my-assets
@@ -63,7 +63,7 @@ python -m map_pipeline extract-assets 'C:\Maps\my_map.ff' --output artifacts/my-
 
 ## Collision, materials and lighting
 
-Axis-aligned box brushes receive box collision. Other solid brushes receive a single convex hull; patch surfaces default to triangle collision. `surface_collision: "dop26"` selects 26-DOP collision for patch surfaces. `object_overrides` can select `box`, `convex`, `triangles`, `dop26` or `none` per source object ID. Box collision around an irregular floor can make the player float; triangle collision preserves its surface, while simplified hulls require playtesting.
+Axis-aligned box brushes receive box collision. Other solid brushes receive a convex hull; Project Jump patches default to 26-DOP collision. Project Jump rejects triangle collision and scales other than 2.54 cm per source unit. Its movement requires boxes/convex shapes; inspect curved or concave surfaces because one hull can bridge empty space. `object_overrides` selects `box`, `convex`, `dop26` or `none` by source object ID, and `"slick": true` adds the Slick actor tag. Generic mode also permits triangle collision. Default Kill Z is preserved in Project Jump mode.
 
 Tool surfaces retain their semantic purpose: caulk is hidden, playerclip blocks players, and trigger volumes are hidden without blocking players. A trigger receives a separate overlap component when configured as a teleport. Ladder and other unsupported gameplay semantics are reported for implementation.
 
@@ -73,7 +73,9 @@ Materials support an explicit `texture`, existing `unreal_asset`, or RGB `color`
 
 ## Teleports and other entities
 
-Install and build the runtime once per destination project:
+Project Jump teleports are generated as content-only Blueprints derived from the engine TriggerBox. They use engine Actor/component calls, Pawn overlap, delays, shared cooldown tags and an overlap recheck. No game controller classes or native map modules are used. Trigger shapes use bounding boxes; verify irregular triggers and multiplayer behavior in playtests.
+
+Only for `-Profile generic`, install and build the native runtime once per destination project:
 
 ```powershell
 .\pipeline\install-map-runtime.ps1 -Project 'C:\Projects\MyGame\MyGame.uproject' `
@@ -85,10 +87,10 @@ Native `trigger_teleport` entities with unique targets can be linked automatical
 
 ```json
 {"teleports": [{"trigger": "enter", "target": "exit", "delay": 0.1,
-                "set_view": true, "cooldown": 0.5}]}
+                "set_view": false, "cooldown": 0.5}]}
 ```
 
-Omit `target` to use each matching trigger entity's own target property. An `entity_id` selector can disambiguate trigger names. Targets must resolve uniquely. Player destinations interpret source origins as feet by default, adding capsule half-height at runtime. Cooldowns prevent portal cycles; delayed teleports check that the pawn remains inside the trigger.
+Omit `target` to use each matching trigger entity's own target property. An `entity_id` selector can disambiguate trigger names. Targets must resolve uniquely. Player destinations interpret source origins as feet by default. Project Jump Blueprints add colliding actor bounds half-height at runtime; generic native teleports use capsule half-height. Forced controller/view rotation is reported as unported in Project Jump mode; no game controller calls are emitted. Cooldowns prevent portal cycles; delayed teleports check that the pawn remains inside the trigger.
 
 GSC files listed in `scripts` are audited for candidate teleport relationships. Candidates require explicit bindings and are never executed. Arbitrary GSC logic, moving platforms, checkpoints and custom movement mechanics need Unreal implementations. `models` maps a source model name to an existing Unreal Static Mesh asset. Unmapped models and unimplemented entities remain in the manifest/report; origin entities also receive metadata markers.
 
@@ -96,10 +98,12 @@ GSC files listed in `scripts` are audited for candidate teleport relationships. 
 
 Preparation rejects malformed or unsupported geometry by default. `allow_fallback_hulls: true` explicitly permits conservative corner hulls for brushes whose original planes cannot form a closed solid; each is reported. `-AllowPartial` explicitly permits missing geometry and should be used only for diagnosis.
 
-The fresh-editor verification checks source actor counts, unique mesh assets, bounds, material assignments, collision settings, teleport destinations and independent actor movement. It does not prove collision feel or actual gameplay. Playtest with your project's pawn and movement system before publishing.
+The fresh-editor verification checks source actor counts, unique mesh assets, bounds, material assignments, collision settings, teleport actors and independent actor movement. Project Jump also verifies plugin layout and default Kill Z, checks the kit project descriptor stayed unchanged, and runs the kit Blueprint validator when available. Playtest with the kit movement system before publishing.
+
+Place Start/Finish TimerZones for each route and optional `<LevelName>_Info` metadata in the kit; routes and difficulty cannot be inferred safely from geometry. Run `./codue5 mp_example -Package` for the official PackageMod validator and DLC cook (CMD when available, otherwise the supplied PowerShell tool). Validation is never bypassed. Review dependency migration and the packaged result. Workshop publication is a separate in-game step.
 
 Asset extraction supports IWD/ZIP image/script files, a restricted COD4 IWI v6 DXT1 format, and source GSC text in supported IWffu100 v5 fastfiles. Unsupported formats are reported. It is not a universal fastfile, texture or model decoder.
 
 Run synthetic tests with `python -m unittest discover -s map_pipeline/tests -v`. The example map is synthetic; game assets and converted levels are not distributed.
 
-Validation performed on UE5.8: the four-object synthetic fixture imported and reloaded with unique meshes, correct materials and independent actor movement. Separate imports exercised box, triangle, convex and 26-DOP collision. The native teleport automation test passed overlap activation, delay, capsule feet positioning and cooldown without warnings. Python has 24 passing tests. A Descent diagnostic import verified 144 valid brushes and explicitly reported six degenerate source brushes. An automated live IW3xo capture of Qube under `3xp_cj` produced 8,908 objects, 146 entities and no unsupported geometry blocks, with the same hash as the previously verified reconstruction. Qube preparation produced all 8,908 source objects (3,304 brushes and 5,604 patches), 14 configured teleport links and 22 flagged fallback hulls; this preparation result is not a full Unreal import or playtest of Qube through this new pipeline.
+Validation performed on UE5.8: the four-object synthetic fixture imported and reloaded with unique meshes, correct materials and independent actor movement. Separate imports exercised box, triangle, convex and 26-DOP collision. The native teleport automation test passed overlap activation, delay, capsule feet positioning and cooldown without warnings. Python has 27 passing tests. A content-only fixture in the actual Project Jump Map Kit passed its validator with 8 assets, 1 Blueprint and 0 violations, and completed the official DLC cook. CmWorld extracted both solid collision brushes with 0 elements skipped. An isolated runtime automation test of the generated Blueprint passed overlap, delay, feet positioning and shared cooldown checks. These fixture checks do not certify every converted map. A Descent diagnostic import verified 144 valid brushes and explicitly reported six degenerate source brushes. An automated live IW3xo capture of Qube under `3xp_cj` produced 8,908 objects, 146 entities and no unsupported geometry blocks, with the same hash as the previously verified reconstruction. Qube preparation produced all 8,908 source objects (3,304 brushes and 5,604 patches), 14 configured teleport links and 22 flagged fallback hulls; this preparation result is not a full Unreal import or playtest of Qube through this new pipeline.

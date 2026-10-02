@@ -6,17 +6,17 @@ A PowerShell pipeline for dumping COD4 maps through IW3xo and importing them int
 ./codue5 mp_mymapname
 ```
 
-On the first run, enter your CoD4 folder, Unreal `.uproject` and `UnrealEditor.exe` paths. Setup saves them locally, enables Unreal Python, builds the teleport runtime, and builds the modified IW3xo exporter if your DLL needs it. Subsequent maps need only their name.
+On the first run, enter your CoD4 folder, Project Jump Map Kit `.uproject` and `UnrealEditor.exe` paths. Setup saves them locally and builds the modified IW3xo exporter if your DLL needs it. Subsequent maps need only their name. The default Project Jump mode uses content-only plugins and Blueprint teleports; it does not rebuild the game or edit the kit project.
 
-The command launches `3xp_cj`, loads the map, exports all collision geometry/entities/model placements, saves and validates a fresh `.map`, closes the game, imports an independent mesh and actor for every brush and patch, verifies the saved Unreal level, then opens it.
+The command launches `3xp_cj`, loads the map, exports all collision geometry/entities/model placements, saves and validates a fresh `.map`, closes the game, imports an independent mesh and actor for every brush and patch into `Plugins/<MapName>/Content`, verifies the saved Unreal level, runs the kit's Blueprint validator, then opens it.
 
 ## Get started
 
 Install these once:
 
 - CoD4 with the full [IW3xo package](https://github.com/xoxor4d/iw3xo-dev/releases), your maps and the `3xp_cj` mod.
-- Unreal Engine and a **C++ project**. For an existing Blueprint project, add a C++ class in Unreal once.
-- Python 3.10+ on PATH, Git and Visual Studio C++ Build Tools with a Windows SDK. Unreal may also require the .NET Framework Developer Pack.
+- Unreal Engine **5.8.x** and the Project Jump Map Kit. Use its compiled project as supplied.
+- Python 3.10+ on PATH and Git. Visual Studio C++ Build Tools are only needed if setup must build the modified IW3xo DLL; the Project Jump map itself contains no C++ module.
 
 Then:
 
@@ -35,12 +35,19 @@ Optional commands:
 ./codue5 mp_mymapname -DryRun        # Show saved paths without launching anything
 ./codue5 mp_mymapname -NoOpen        # Import and verify, leave Unreal closed
 ./codue5 mp_mymapname -LeaveGameOpen # Keep CoD4 open after a successful dump
+./codue5 mp_mymapname -Package      # Validate/cook with the kit's PackageMod.ps1
 ./codue5 -SetupOnly -Mod other_mod  # Change the installed mod folder
 ```
 
 Settings live in ignored `local.codue5.json`. Override paths with `-Cod4Root`, `-Project` or `-Editor`; rerun `-SetupOnly` when changing projects. Optional map settings load automatically from ignored `local.maps/<mapname>.json`. Copy `map_pipeline/examples/config.json` there and replace its demonstration values to configure textures, sky, models and script-driven teleports. `-Config` selects another file.
 
-Brush UVs and patch UVs use the data available in the reconstructed export. Missing original textures/UVs, render-only geometry and arbitrary GSC logic cannot be recovered by this command. Missing assets and unsupported gameplay are reported; configured teleports run through the included native plugin. Playtest the result with your own pawn and movement system.
+Brush UVs and patch UVs use the data available in the reconstructed export. Missing original textures/UVs, render-only geometry and arbitrary GSC logic cannot be recovered by this command. Missing assets and unsupported gameplay are reported; configured teleports become content-only Blueprints in Project Jump mode. Playtest the result with the kit movement system.
+
+Project Jump mode follows the [mapping guide](https://project-jump.github.io/): alphanumeric, stable content-plugin names; levels in `Content/Maps`; all generated assets inside the plugin; 2.54 cm per source unit; boxes/convex collision for movement; and unchanged default Kill Z. For `mp_mymapname`, the default plugin/level name is `mpmymapname` (underscores are removed). Set `plugin_name` before the first import if you prefer another permanent identity. Never rename it after publishing.
+
+Content-only teleport Blueprints use engine Actor/component calls, overlap only Pawns, apply source delays and shared cooldown tags, and check overlap before transport. They do not call the game's player/controller classes; forced controller/view rotation is reported as unported. Concave/curved collision, trigger bounds and multiplayer behavior need playtesting. Place your Start/Finish TimerZones and optional `<LevelName>_Info` map-card asset in the kit. `-Package` uses the official validator/cooker without bypasses; Workshop publication remains a separate game action.
+
+For another Unreal project, `-Profile generic` retains the older `/Game/CodMaps` layout and native runtime. That mode requires a C++ project and Unreal build dependencies and is **not a Project Jump mod output**.
 
 See the [pipeline guide](docs/MAP_PIPELINE.md) for collision options, asset extraction, setup troubleshooting and lower-level `Import_Map.cmd` usage. The pinned modified exporter source is [published in the IW3xo fork](https://github.com/9aj/iw3xo-dev/tree/5b1b57e5e48764783a223e891ca1573d040690ea); setup clones/builds it into ignored `artifacts/` and preserves the previous DLL before installing it.
 
@@ -55,7 +62,7 @@ No game, map, texture, captured model, Unreal project or compiled tool binary is
 | Component | Status |
 |---|---|
 | Direct Radiant .map pipeline | Independent brush/patch actors, per-object collision, materials, lighting, six-face sky, configured model/teleport bindings, resumable import and saved-level verification |
-| CodMapRuntime Unreal plugin | Native per-pawn teleport delay, capsule feet offset and shared cooldown; C++ source included |
+| CodMapRuntime Unreal plugin | Generic profile only: native per-pawn teleport delay, capsule feet offset and shared cooldown; C++ source included |
 | C2M/Husky-derived COD4 world exporter | Buildable C# source; reads supported `iw3mp` layouts and rejects unrecognised layouts |
 | Inventory, hashes, OBJ validation and neutral material preparation | Runnable PowerShell / C# commands |
 | Static-model buffer capture | Separate command; LOD0 decoding demonstrated on Tunnel |

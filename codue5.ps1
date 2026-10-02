@@ -10,11 +10,13 @@ param(
     [switch]$DryRun,
     [switch]$LeaveGameOpen,
     [switch]$NoOpen,
+    [switch]$Package,
     [string]$Cod4Root,
     [string]$Project,
     [string]$Editor,
     [string]$Mod,
     [string]$Config,
+    [ValidateSet('project_jump','generic')][string]$Profile='project_jump',
     [string]$CompilerVersion,
     [string]$Settings
 )
@@ -50,7 +52,7 @@ if ($firstRun -and -not $DryRun) { Write-Host 'First run: choose your game and U
 $Cod4Root=Read-RequiredPath 'CoD4 folder containing iw3xo.exe' $Cod4Root
 $Project=Read-RequiredPath 'Destination Unreal .uproject file (C++ project)' $Project
 $Editor=Read-RequiredPath 'UnrealEditor.exe path' $Editor
-$firstRun=$firstRun -or $Project -ne $saved.Project -or $Editor -ne $saved.Editor -or $Cod4Root -ne $saved.Cod4Root
+$firstRun=$firstRun -or $Profile -ne $saved.Profile -or $Project -ne $saved.Project -or $Editor -ne $saved.Editor -or $Cod4Root -ne $saved.Cod4Root
 if ([IO.Path]::GetExtension($Project) -ne '.uproject') { throw 'Project must be a .uproject file.' }
 if ([IO.Path]::GetFileName($Editor) -ne 'UnrealEditor.exe') { throw 'Editor must be UnrealEditor.exe.' }
 $engineRoot=[IO.Path]::GetFullPath((Join-Path (Split-Path $Editor -Parent) '../../..'))
@@ -78,7 +80,7 @@ if (-not $Config) {
     if ($MapName -and (Test-Path -LiteralPath $candidate)) { $Config=$candidate }
 }
 if ($Config) { $Config=(Resolve-Path -LiteralPath $Config).Path }
-$settingsData=@{Cod4Root=$Cod4Root;Project=$Project;Editor=$Editor;Mod=$Mod;Python=$python;CompilerVersion=$CompilerVersion;RuntimeReady=[bool]$saved.RuntimeReady}
+$settingsData=@{Cod4Root=$Cod4Root;Project=$Project;Editor=$Editor;Mod=$Mod;Python=$python;CompilerVersion=$CompilerVersion;Profile=$Profile;RuntimeReady=[bool]$saved.RuntimeReady}
 if ($DryRun) {
     Write-Host 'Dry run: no game launch, build, project edits or import.'
     $settingsData | ConvertTo-Json
@@ -89,23 +91,40 @@ if ($firstRun -or $Setup -or $SetupOnly) {
     $active=@(Get-CimInstance Win32_Process -Filter "Name='UnrealEditor.exe' OR Name='UnrealEditor-Cmd.exe' OR Name='iw3xo.exe' OR Name='iw3mp.exe'" | Where-Object { $_.Name -in @('iw3xo.exe','iw3mp.exe') -or ($_.CommandLine -and $_.CommandLine.IndexOf($Project,[StringComparison]::OrdinalIgnoreCase) -ge 0) })
     if ($active.Count) { throw 'Save and close the destination Unreal project and CoD4 before setup.' }
     $descriptor=Get-Content -LiteralPath $Project -Raw | ConvertFrom-Json
-    if (-not @($descriptor.Modules).Count -or -not $descriptor.Modules) { throw 'Use a C++ Unreal project, or add a C++ class in Unreal once, then close the editor and rerun.' }
+    if ($Profile -eq 'generic' -and (-not @($descriptor.Modules).Count -or -not $descriptor.Modules)) { throw 'Generic native-runtime mode needs a C++ Unreal project.' }
     $dllPath=Join-Path $Cod4Root 'iw3x.dll'
     if (-not (Test-Path -LiteralPath $dllPath) -or -not [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($dllPath)).Contains('mapexport_useFilters')) {
         & (Join-Path $PSScriptRoot 'pipeline/setup-iw3xo.ps1') -Cod4Root $Cod4Root
     }
+    if ($Profile -eq 'generic') {
     if (-not $descriptor.Plugins) { $descriptor | Add-Member -NotePropertyName Plugins -NotePropertyValue @() -Force }
     $pythonPlugin=$descriptor.Plugins | Where-Object Name -eq 'PythonScriptPlugin'
     if ($pythonPlugin) { $pythonPlugin.Enabled=$true } else { $descriptor.Plugins+=@{Name='PythonScriptPlugin';Enabled=$true} }
     $descriptor | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $Project -Encoding utf8
     Write-Host 'Installing and building the Unreal teleport runtime...'
     & (Join-Path $PSScriptRoot 'pipeline/install-map-runtime.ps1') -Project $Project -Engine $engineRoot -CompilerVersion $CompilerVersion
+    } else {
+        $version=Get-Content (Join-Path $engineRoot 'Engine/Build/Build.version') -Raw | ConvertFrom-Json
+        if ($version.MajorVersion -ne 5 -or $version.MinorVersion -ne 8) { throw 'Project Jump Map Kit requires Unreal Engine 5.8.x.' }
+        Write-Host 'Project Jump mode: content-only map plugin; kit project and compiled game remain unchanged.'
+    }
     $settingsData.RuntimeReady=$true
     $settingsData | ConvertTo-Json | Set-Content -LiteralPath $settingsPath -Encoding utf8
     Write-Host ('Setup saved: '+$settingsPath)
 }
 if ($SetupOnly -or -not $MapName) { Write-Host 'Ready. Run ./codue5 mp_mymapname';return }
-$run=@{Cod4Root=$Cod4Root;MapName=$MapName;Mod=$Mod;Project=$Project;Editor=$Editor;Python=$python;Open=(-not $NoOpen);LeaveGameOpen=$LeaveGameOpen}
+$run=@{Cod4Root=$Cod4Root;MapName=$MapName;Mod=$Mod;Project=$Project;Editor=$Editor;Python=$python;Profile=$Profile;Open=(-not $NoOpen -and -not $Package);LeaveGameOpen=$LeaveGameOpen}
 if ($Config) { $run.Config=$Config }
 Write-Host ('Dumping '+$MapName+', then importing and verifying in Unreal...')
 & (Join-Path $PSScriptRoot 'pipeline/import-map.ps1') @run
+if ($Package) {
+    if ($Profile -ne 'project_jump') { throw 'Package uses the Project Jump kit workflow; select project_jump profile.' }
+    $packageScript=Join-Path (Split-Path $Project -Parent) 'Tools/PackageMod.cmd'
+    $packagePowerShell=Join-Path (Split-Path $Project -Parent) 'Tools/PackageMod.ps1'
+    if (-not (Test-Path -LiteralPath $packageScript) -and -not (Test-Path -LiteralPath $packagePowerShell)) { throw 'Project Jump packaging tool is missing from the selected kit.' }
+    $mapConfig=if ($Config) { Get-Content -LiteralPath $Config -Raw | ConvertFrom-Json } else { $null }
+    $pluginName=if ($mapConfig.plugin_name) { $mapConfig.plugin_name } elseif ($mapConfig.map_id) { $mapConfig.map_id -replace '[^A-Za-z0-9]','' } else { $MapName -replace '[^A-Za-z0-9]','' }
+    if (Test-Path -LiteralPath $packageScript) { & $packageScript -Name $pluginName -Engine $engineRoot }
+    else { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $packagePowerShell -Name $pluginName -Engine $engineRoot }
+    if ($LASTEXITCODE -ne 0) { throw 'Project Jump package validation/cook failed. Inspect the kit output.' }
+}

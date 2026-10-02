@@ -104,6 +104,9 @@ def decorate(manifest,actors,config):
 
 def gameplay(manifest,actors,source_actors,config):
     if not manifest['gameplay']['teleports']:return []
+    if config.get('profile')=='project_jump':
+        from map_pipeline.unreal_jump import place_teleports
+        return place_teleports(manifest,actors,source_actors,config)
     cls=u.load_class(None,'/Script/CodMapRuntime.CodMapTeleport')
     if not cls:raise RuntimeError('Teleports require the included CodMapRuntime plugin. Install and build it before import.')
     placed=[];existing={a.get_actor_label():a for a in actors.get_all_level_actors()}
@@ -125,6 +128,9 @@ def main():
     report_path=work/'unreal-result.json';data=validate(manifest_path);config=data['config']
     if data['issues'] and os.environ.get('CODJUE_ALLOW_PARTIAL')!='1':raise RuntimeError('Source geometry has unresolved conversion errors')
     level=config.get('unreal_root','/Game/CodMaps')+'/'+data['map_id']+'/Map_'+data['map_id'];dest=level.rsplit('/',1)[0]+'/Generated'
+    if config.get('profile')=='project_jump':
+        from map_pipeline.project_jump import layout
+        _,level,dest=layout(data)
     levels=u.get_editor_subsystem(u.LevelEditorSubsystem);actors=u.get_editor_subsystem(u.EditorActorSubsystem)
     prior=json.loads(report_path.read_text()) if report_path.exists() else {}
     project=os.path.normcase(os.path.abspath(u.Paths.get_project_file_path()))
@@ -149,6 +155,7 @@ def main():
             a=actors.spawn_actor_from_class(u.StaticMeshActor,u.Vector(*row['center_cm']));a.set_actor_location(u.Vector(*row['center_cm']),False,False);a.set_actor_label(label);a.set_folder_path('COD/'+row['kind'].title()+'es')
             a.static_mesh_component.set_static_mesh(mesh);a.static_mesh_component.set_collision_profile_name('NoCollision' if row['collision']=='none' else 'BlockAll');a.set_actor_hidden_in_game(row['tool_surface']);a.static_mesh_component.set_editor_property('cast_shadow',not row['tool_surface'])
             a.tags=[u.Name('Source_'+row['id']),u.Name(row['entity_id']),u.Name('SourceLine_'+str(row['source_line']))]
+            if row.get('slick'):a.tags=list(a.tags)+[u.Name('Slick')]
             if row['fallback_hull']:a.tags=list(a.tags)+[u.Name('REVIEW_FallbackHull')]
         source_actors[row['id']]=a
         if index%int(config.get('checkpoint_interval',100))==0:
@@ -156,7 +163,7 @@ def main():
     decorate(data,actors,config)
     teleports=gameplay(data,actors,source_actors,config)
     world=u.get_editor_subsystem(u.UnrealEditorSubsystem).get_editor_world()
-    world.get_world_settings().set_editor_property('kill_z',min(r['center_cm'][2]-r['size_cm'][2]/2 for r in data['objects'])-10000)
+    if config.get('profile')!='project_jump':world.get_world_settings().set_editor_property('kill_z',min(r['center_cm'][2]-r['size_cm'][2]/2 for r in data['objects'])-10000)
     if config.get('sky'):
         from map_pipeline.unreal_sky import add_sky
         add_sky(config['sky'],data,work,dest,actors)
