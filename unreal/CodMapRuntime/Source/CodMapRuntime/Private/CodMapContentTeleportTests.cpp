@@ -20,6 +20,11 @@ bool FCodMapContentTeleportTest::RunTest(const FString&)
         AddInfo(TEXT("Provide -CodJueTeleportTestClass with the generated synthetic fixture Blueprint class to run this integration test."));
         return true;
     }
+    FVector ExpectedDestination(2600.96,0,365.12);
+    FString ExpectedText;
+    if (FParse::Value(FCommandLine::Get(), TEXT("CodJueExpectedDestination="), ExpectedText))
+        if (!ExpectedDestination.InitFromString(ExpectedText)) { AddError(TEXT("Invalid expected destination"));return false; }
+    const bool bInstant = FParse::Param(FCommandLine::Get(), TEXT("CodJueInstantTeleport"));
     UClass* PortalClass = LoadClass<AActor>(nullptr, *ClassPath);
     if (!TestNotNull(TEXT("Content-only Blueprint loads"), PortalClass)) return false;
     const auto Values = UWorld::InitializationValues().AllowAudioPlayback(false).CreatePhysicsScene(true)
@@ -44,12 +49,12 @@ bool FCodMapContentTeleportTest::RunTest(const FString&)
     auto Tick = [World]() { ++GFrameCounter;World->Tick(LEVELTICK_All,0.03f); };
     Pawn->SetActorLocation(FVector::ZeroVector);Capsule->UpdateOverlaps();
     TestTrue(TEXT("Blueprint claims shared pawn-root cooldown tag"), Capsule->ComponentTags.Contains(TEXT("CODJumpTeleportLock")));
-    Tick();TestTrue(TEXT("Blueprint respects source delay"),Pawn->GetActorLocation().Equals(FVector::ZeroVector,1));
-    for (int Index=0;Index<10;++Index) Tick();
+    Tick();if (!bInstant) TestTrue(TEXT("Blueprint respects source delay"),Pawn->GetActorLocation().Equals(FVector::ZeroVector,1));
+    for (int Index=0;Index<(bInstant ? 1 : 10);++Index) Tick();
     // Destination from map_pipeline/tests/test_conversion.fixture(), plus 40cm capsule half-height.
-    TestTrue(TEXT("Blueprint applies destination and standing feet offset"),Pawn->GetActorLocation().Equals(FVector(2600.96,0,365.12),1));
+    TestTrue(TEXT("Blueprint applies destination and standing feet offset"),Pawn->GetActorLocation().Equals(ExpectedDestination,1));
     Pawn->SetActorLocation(FVector::ZeroVector);Capsule->UpdateOverlaps();
-    for (int Index=0;Index<4;++Index) Tick();
+    for (int Index=0;Index<(bInstant ? 1 : 4);++Index) Tick();
     TestTrue(TEXT("Blueprint cooldown suppresses immediate reentry"),Pawn->GetActorLocation().Equals(FVector::ZeroVector,1));
     for (int Index=0;Index<15;++Index) Tick();
     TestFalse(TEXT("Shared cooldown tag is released"),Capsule->ComponentTags.Contains(TEXT("CODJumpTeleportLock")));

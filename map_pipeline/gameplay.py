@@ -65,16 +65,20 @@ def resolve_gameplay(entities,objects,config,scale):
             unresolved.append({'binding':binding,'reason':'No matching trigger brush'});continue
         for obj in triggers:
             target=binding.get('target') or obj['entity'].get('target')
-            destinations=[e for e in by_target.get(target,[]) if 'origin' in e['properties']]
-            if len(destinations)!=1:
-                unresolved.append({'object':obj['id'],'target':target,'reason':'Destination missing or ambiguous'});continue
+            if 'destination' in binding:
+                origin=binding['destination'];angles=binding.get('angles',[0,0,0])
+                target='configured_coordinates'
+            else:
+                destinations=[e for e in by_target.get(target,[]) if 'origin' in e['properties']]
+                if len(destinations)!=1:
+                    unresolved.append({'object':obj['id'],'target':target,'reason':'Destination missing or ambiguous'});continue
+                props=destinations[0]['properties'];origin=numbers(props['origin'],3);angles=numbers(props.get('angles','0 0 0'),3)
             if obj['id'] in used:
                 raise MapError('Multiple teleport mappings for '+obj['id'])
             used.add(obj['id'])
-            props=destinations[0]['properties'];angles=numbers(props.get('angles','0 0 0'),3)
             delay=float(binding.get('delay',0));cooldown=float(binding.get('cooldown',0.5))
             if not 0<=delay<=60 or not 0<=cooldown<=60:raise MapError('Invalid teleport timing')
-            teleports.append({'object_id':obj['id'],'target':target,'destination_cm':point_cm(numbers(props['origin'],3),scale),'destination_angles':[-angles[0],-angles[1],angles[2]],'set_view':bool(binding.get('set_view',False)),'delay':delay,'cooldown':cooldown})
+            teleports.append({'object_id':obj['id'],'target':target,'destination_cm':point_cm(origin,scale),'destination_angles':[-angles[0],-angles[1],angles[2]],'set_view':bool(binding.get('set_view',False)),'delay':delay,'cooldown':cooldown})
             if config.get('profile')=='project_jump' and binding.get('set_view'):
                 unresolved.append({'object':obj['id'],'reason':'Actor destination rotation is imported; forced controller/view rotation belongs to the game and is not called by map Blueprints'})
     for obj in objects:

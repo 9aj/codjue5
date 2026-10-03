@@ -24,9 +24,14 @@ def validate_config(config):
     for name in ('allow_fallback_hulls','nanite','source_origin_at_feet'):
         if name in config and not isinstance(config[name],bool):raise MapError(name+' must be a boolean')
     for binding in config.get('teleports',[]):
-        if not isinstance(binding,dict) or set(binding)-{'trigger','entity_id','target','delay','cooldown','set_view'}:raise MapError('Invalid teleport binding keys')
+        if not isinstance(binding,dict) or set(binding)-{'trigger','entity_id','target','destination','angles','delay','cooldown','set_view'}:raise MapError('Invalid teleport binding keys')
         if ('trigger' in binding)==('entity_id' in binding):raise MapError('Teleport requires exactly one trigger or entity_id selector')
         if 'set_view' in binding and not isinstance(binding['set_view'],bool):raise MapError('set_view must be a boolean')
+        if 'destination' in binding:
+            if 'target' in binding:raise MapError('Choose target or destination for a teleport')
+            for key in ('destination','angles'):
+                values=binding.get(key,[0,0,0])
+                if not isinstance(values,list) or len(values)!=3 or any(not math.isfinite(float(v)) for v in values):raise MapError(key+' must be three finite source-space numbers')
     for name,spec in config.get('object_overrides',{}).items():
         if not isinstance(spec,dict) or set(spec)-{'collision','slick'}:raise MapError('Invalid object override for '+name)
         if 'collision' in spec and spec['collision'] not in ('box','convex','triangles','dop26','none'):raise MapError('Invalid collision override for '+name)
