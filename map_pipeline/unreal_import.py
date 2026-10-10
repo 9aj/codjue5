@@ -13,6 +13,21 @@ def save_json(path,data):
     temp=path.with_suffix('.tmp');temp.write_text(json.dumps(data,indent=2),encoding='utf-8');temp.replace(path)
 
 
+def source_convex_collision(mesh):
+    """Hull of the source brush, without voxel-decomposition drift or curved primitives."""
+    dynamic=u.DynamicMesh()
+    dynamic,outcome=u.GeometryScript_AssetUtils.copy_mesh_from_static_mesh_v2(
+        mesh,dynamic,u.GeometryScriptCopyMeshFromAssetOptions(),u.GeometryScriptMeshReadLOD())
+    assert outcome==u.GeometryScriptOutcomePins.SUCCESS,mesh.get_path_name()
+    options=u.GeometryScriptCollisionFromMeshOptions()
+    options.method=u.GeometryScriptCollisionGenerationMethod.CONVEX_HULLS
+    options.auto_detect_boxes=False;options.auto_detect_spheres=False;options.auto_detect_capsules=False
+    options.simplify_hulls=False;options.max_convex_hulls_per_mesh=1;options.max_shape_count=1
+    options.convex_hull_geometric_tolerance=0.0
+    u.GeometryScript_Collision.set_static_mesh_collision_from_mesh(dynamic,mesh,options)
+    assert u.get_editor_subsystem(u.StaticMeshEditorSubsystem).get_convex_collision_count(mesh)==1
+
+
 def import_mesh(row,work,dest,materials,config):
     path=dest+'/Objects/SM_'+row['id']
     mesh=u.load_asset(path)
@@ -37,7 +52,10 @@ def import_mesh(row,work,dest,materials,config):
             shape=u.ScriptingCollisionShapeType.BOX if policy=='box' else u.ScriptingCollisionShapeType.NDOP26
             assert editor.add_simple_collisions(mesh,shape)>=0
         elif policy=='convex':
-            assert editor.set_convex_decomposition_collisions(mesh,1,64,1000000)
+            if config.get('profile')=='project_jump' and row['shape']=='convex' and not row['fallback_hull']:
+                source_convex_collision(mesh)
+            else:
+                assert editor.set_convex_decomposition_collisions(mesh,1,64,1000000)
             assert editor.get_convex_collision_count(mesh)==1
         body=mesh.get_editor_property('body_setup')
         if body:
@@ -46,6 +64,9 @@ def import_mesh(row,work,dest,materials,config):
         if config.get('nanite',False):
             settings=editor.get_nanite_settings(mesh);settings.enabled=True;editor.set_nanite_settings(mesh,settings,True)
         assert u.EditorAssetLibrary.save_loaded_asset(mesh)
+    if config.get('profile')=='project_jump' and (row['collision']!='none' or row['semantic']=='trigger'):
+        from map_pipeline.movement import inspect_mesh
+        inspect_mesh(mesh,u)
     return mesh
 
 

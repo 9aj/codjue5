@@ -25,11 +25,16 @@ def read_config(path):
 def validate(path):
     path=Path(path).resolve();data=json.loads(path.read_text(encoding='utf-8-sig'))
     if data.get('schema_version')!=1:raise MapError('Unsupported manifest schema')
+    from .config import validate_config
+    validate_config(data['config'])
     if digest(path.parent/'source.map')!=data['source_sha256']:raise MapError('Source snapshot changed')
     for filename,expected in data.get('dependencies',{}).items():
         if digest(filename)!=expected:raise MapError('Input dependency changed: '+filename)
     ids=set()
     for row in data['objects']:
+        if data['config'].get('profile')=='project_jump':
+            from .movement import validate_policy
+            validate_policy(row['collision'])
         if row['id'] in ids:raise MapError('Duplicate object id')
         ids.add(row['id'])
         obj=(path.parent/row['obj']).resolve()

@@ -1,0 +1,24 @@
+# Live Project Jump re-export
+
+The movement contract follows https://project-jump.github.io/#movement (checked 2026-10-10): 2.54 cm per unit, boxes or convex hulls, no sphere/capsule mixed into movement meshes, default Kill Z, and `Slick` tags authored before PIE.
+
+Project Jump convex source brushes use Geometry Script convex hull generation with simplification and sphere/capsule detection disabled. Voxel decomposition is unsuitable for these brushes: Echo's first runtime audit rejected five approximate hulls as nonconvex; direct source hulls passed. Surface/DOP approximations still require playtesting.
+
+Prepare a fresh output folder using `python -m map_pipeline prepare SOURCE --output OUTPUT --config CONFIG`. Set `profile` to `project_jump` and `plugin_name` to the existing permanent plugin identity. Map materials through `materials.<source>.unreal_asset` to preserve existing material designs. Set `nanite` to the intended existing policy.
+
+In the connected editor, open the destination map and stop PIE. Use VibeUE `execute_python_code`, starting with `import unreal`; add the codjue5 directory to `sys.path`. Call:
+
+```python
+from map_pipeline.unreal_mcp_import import stage, apply
+stage(manifest_path, expected_project_path, 'R_unique_revision')
+# Verify stage completion before applying.
+apply(manifest_path, expected_project_path, 'R_unique_revision')
+```
+
+The staging call imports fresh assets below the map plugin's Generated/revision folder. The apply call checks the project/map, backs up the saved world under the plugin's Backups folder, unloads the backup package, and replaces only actors whose COD Brush/Patch labels and source ownership tags agree. Other actors are preserved. Source transforms are reset from the map file, and missing source brushes are restored. Earlier meshes/materials remain available to the backup. Imported source actors with attached work and source teleports are rejected rather than silently orphaned. This path never launches, restarts or quits Unreal.
+
+Wrap mutations with VibeUE WorkflowService start_run/finish_run. After applying, call `map_pipeline.unreal_verify.main()` with `CODJUE_MANIFEST` set; call functions directly, or set `CODJUE_QUIT=0` before executing entrypoint scripts in a live editor. No changed Blueprint is needed for a geometry-only re-export.
+
+Finally start PIE with an explicit spawn transform at the authored PlayerStart (avoid default-filled zero transforms), read the fresh CmWorld log segment, and capture the game with VibeUE `capture_image`. Require zero skipped source collision elements and inspect the player at the platform. Save/reload and shape counts alone cannot establish movement compatibility. Stop PIE and restore background throttling afterward. A spawn and brush-conversion check does not establish full-route bounce/elevator completion.
+
+Duplicating a World leaves a resident map package: release its Python World reference and use `EditorLoadingAndSavingUtils.unload_packages` before any level reload. Garbage collection alone does not unload it.
