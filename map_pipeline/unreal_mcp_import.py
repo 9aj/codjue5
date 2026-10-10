@@ -68,7 +68,9 @@ def apply(manifest_path, expected_project, revision):
         mesh = u.load_asset(dest+'/Objects/SM_'+row['id'])
         assert isinstance(mesh, u.StaticMesh)
         if row['collision'] != 'none':inspect_mesh(mesh, u)
-    backup = level.rsplit('/Maps/', 1)[0]+'/Backups/'+level.rsplit('/', 1)[1]+'_Before_'+revision
+    # PackageMod scans every .umap inside the mod, including folders called Backups.
+    # Unreferenced editor recovery maps must live outside that content mount.
+    backup = '/Game/Developers/Codjue5Backups/'+level.split('/')[1]+'/'+level.rsplit('/', 1)[1]+'_Before_'+revision
     assert not u.EditorAssetLibrary.does_asset_exist(backup), 'Backup exists; use a fresh revision'
     assert levels.save_current_level()
     snapshot = u.EditorAssetLibrary.duplicate_asset(level, backup)

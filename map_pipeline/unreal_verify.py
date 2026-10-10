@@ -28,7 +28,11 @@ def main():
         body=mesh.get_editor_property('body_setup')
         policy=row['collision']
         if row['semantic']=='trigger':policy='box' if row['shape']=='box' else 'convex'
-        if policy=='box':assert editor.get_simple_collision_count(mesh)>0,(row['id'],policy)
+        if policy=='box':
+            assert editor.get_simple_collision_count(mesh)>0,(row['id'],policy)
+            if row.get('collision_box'):
+                from map_pipeline.unreal_import import verify_box_collision
+                verify_box_collision(mesh,row['collision_box'])
         if policy=='dop26':assert editor.get_convex_collision_count(mesh)>0,(row['id'],policy)
         if policy=='convex':assert editor.get_convex_collision_count(mesh)==1
         if policy=='triangles':assert body.get_editor_property('collision_trace_flag')==u.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE
@@ -61,6 +65,8 @@ def main():
     report.update(status='complete',saved_reload_verified=True,independent_move_verified=move_verified,verified_source_actors=len(paths),unique_render_meshes=len(set(paths)),worst_bounds_error_cm=worst)
     if data['config'].get('profile')=='project_jump':
         from map_pipeline.project_jump import layout
+        from map_pipeline.movement import inspect_level
+        report['blocking_mesh_audit']=inspect_level(actors.get_all_level_actors(),u)
         name,level,_=layout(data)
         assert report['level']==level and all(p.startswith('/'+name+'/') for p in paths)
         world=u.get_editor_subsystem(u.UnrealEditorSubsystem).get_editor_world()
