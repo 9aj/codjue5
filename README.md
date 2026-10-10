@@ -111,3 +111,7 @@ This work builds on **[C2M by SHEILAN](https://github.com/sheilan102/C2M)**, **[
 We also used OpenAssetTools, CoD4x and iw3xo source as layout/research references, and Poly Haven CC0 scans for the example map's material pass. See [CREDITS.md](CREDITS.md) for the precise distinction between included code, consulted references and optional art sources.
 
 Code and documentation are provided under **GPL-3.0-or-later**, except the separately identified MIT-covered PhilLibX code. Original notices are retained; [LICENSE](LICENSE) contains the GPL text. The license does not cover game assets or grant permission to redistribute a converted map. Unreal Engine is a separately licensed dependency, not part of this source distribution.
+
+## Live Unreal MCP re-export
+
+For an existing Project Jump plugin, see [MCP re-export](docs/MCP_REEXPORT.md). It stages fresh meshes, backs up the level, preserves unrelated actors, and verifies the box/convex movement contract in the connected editor.

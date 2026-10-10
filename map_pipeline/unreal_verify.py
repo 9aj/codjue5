@@ -32,6 +32,11 @@ def main():
         if policy=='dop26':assert editor.get_convex_collision_count(mesh)>0,(row['id'],policy)
         if policy=='convex':assert editor.get_convex_collision_count(mesh)==1
         if policy=='triangles':assert body.get_editor_property('collision_trace_flag')==u.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE
+        if data['config'].get('profile')=='project_jump' and policy!='none':
+            from map_pipeline.movement import inspect_mesh
+            inspect_mesh(mesh,u)
+        if row.get('slick'):assert 'Slick' in [str(tag) for tag in a.tags],row['id']
+        if data['config'].get('nanite'):assert editor.get_nanite_settings(mesh).enabled,row['id']
     assert len(set(paths))==len(data['objects']),'Source objects share mesh assets'
     assert len([n for n in labels if n.startswith('COD Brush_') or n.startswith('COD Patch_')])==len(data['objects'])
     for row in data['gameplay']['teleports']:
