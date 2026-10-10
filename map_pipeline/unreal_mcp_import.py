@@ -59,7 +59,6 @@ def apply(manifest_path, expected_project, revision):
         if re.fullmatch(r'COD (Brush|Patch)_\d+', actor.get_actor_label()):
             identity = actor.get_actor_label()[4:]
             assert 'Source_'+identity in [str(t) for t in actor.tags], 'Missing source ownership tag'
-            assert not actor.get_attached_actors(), 'Source actor has attached user work'
             owned.append(actor)
     assert owned, 'No owned source geometry in current map'
     assert any(isinstance(a, u.PlayerStart) for a in actors.get_all_level_actors()), 'Place a PlayerStart first'
@@ -82,28 +81,28 @@ def apply(manifest_path, expected_project, revision):
     del backup_package
     print('BACKUP:', backup)
     preserved = len(actors.get_all_level_actors())-len(owned)
-    with u.ScopedEditorTransaction('Re-export source map '+data['map_id']):
-        for actor in owned:
-            assert actors.destroy_actor(actor)
+    existing = {a.get_actor_label()[4:]: a for a in owned}
+    transforms = {}
+    skipped = []
+    with u.ScopedEditorTransaction('Refresh source mesh assets '+data['map_id']):
         for row in data['objects']:
-            actor = actors.spawn_actor_from_class(u.StaticMeshActor, u.Vector(*row['center_cm']))
-            actor.set_actor_location(u.Vector(*row['center_cm']), False, False)
-            actor.set_actor_label('COD '+row['id'])
-            actor.set_folder_path('COD/'+row['kind'].title()+'es')
+            actor = existing.get(row['id'])
+            if actor is None:
+                # An absent actor may be an intentional user deletion.
+                skipped.append(row['id'])
+                continue
+            p=actor.get_actor_location();r=actor.get_actor_rotation();s=actor.get_actor_scale3d()
+            transforms[row['id']] = dict(position=[p.x,p.y,p.z], rotation=[r.pitch,r.yaw,r.roll], scale=[s.x,s.y,s.z])
             component = actor.static_mesh_component
-            component.set_static_mesh(u.load_asset(dest+'/Objects/SM_'+row['id']))
-            component.set_collision_profile_name('NoCollision' if row['collision']=='none' else 'BlockAll')
-            actor.set_actor_hidden_in_game(row['tool_surface'])
-            component.set_editor_property('cast_shadow', not row['tool_surface'])
-            actor.tags = [u.Name('Source_'+row['id']), u.Name(row['entity_id']), u.Name('SourceLine_'+str(row['source_line']))]
-            if row.get('slick'):actor.tags = list(actor.tags)+[u.Name('Slick')]
-        world = u.get_editor_subsystem(u.UnrealEditorSubsystem).get_editor_world()
-        world.get_world_settings().set_editor_property('kill_z', u.get_default_object(u.WorldSettings).get_editor_property('kill_z'))
+            actor.modify();component.modify()
+            assert component.set_static_mesh(u.load_asset(dest+'/Objects/SM_'+row['id']))
+            assert actor.get_actor_location()==p and actor.get_actor_rotation()==r and actor.get_actor_scale3d()==s
     assert levels.save_current_level()
     report = dict(status='built', fingerprint=data['fingerprint'], project=str(Path(expected_project).resolve()).lower(),
-                  level=level, destination=dest, backup=backup, completed=len(data['objects']),
+                  level=level, destination=dest, backup=backup, completed=len(transforms),
+                  source_transforms=transforms, skipped_absent_source_actors=skipped,
                   preserved_user_actors=preserved, source_summary=data['summary'],
                   saved_reload_verified=False, runtime_movement_verified=False,
                   issues=data['issues'], unresolved_gameplay=data['gameplay']['unresolved'], limitations=data['limitations'])
     save_json(work/'unreal-result.json', report)
-    print('MODIFIED:', level, 'source objects:', len(data['objects']), 'preserved user actors:', preserved)
+    print('MODIFIED:', level, 'source objects:', len(transforms), 'preserved user actors:', preserved)

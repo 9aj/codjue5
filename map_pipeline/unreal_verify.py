@@ -15,10 +15,16 @@ def main():
     assert u.get_editor_subsystem(u.LevelEditorSubsystem).load_level(report['level'])
     actors=u.get_editor_subsystem(u.EditorActorSubsystem);editor=u.get_editor_subsystem(u.StaticMeshEditorSubsystem)
     labels={a.get_actor_label():a for a in actors.get_all_level_actors()};paths=[];worst=0
-    for row in data['objects']:
+    expected_rows=[row for row in data['objects'] if row['id'] not in report.get('skipped_absent_source_actors',[])]
+    for row in expected_rows:
         a=labels['COD '+row['id']];mesh=a.static_mesh_component.static_mesh;assert mesh
-        assert (a.get_actor_location()-u.Vector(*row['center_cm'])).length()<.1,row['id']
-        assert a.get_actor_scale3d()==u.Vector(1,1,1)
+        authored=report.get('source_transforms',{}).get(row['id'])
+        position=authored['position'] if authored else row['center_cm']
+        assert (a.get_actor_location()-u.Vector(*position)).length()<.001,row['id']
+        assert a.get_actor_scale3d()==u.Vector(*(authored['scale'] if authored else [1,1,1]))
+        if authored:
+            r=a.get_actor_rotation()
+            assert max(abs(x-y) for x,y in zip([r.pitch,r.yaw,r.roll],authored['rotation']))<.001
         bounds=mesh.get_bounding_box();size=[bounds.max.x-bounds.min.x,bounds.max.y-bounds.min.y,bounds.max.z-bounds.min.z]
         error=max(abs(x-y) for x,y in zip(size,row['size_cm']));worst=max(worst,error);assert error<.1,(row['id'],error)
         paths.append(mesh.get_path_name())
@@ -41,8 +47,8 @@ def main():
             inspect_mesh(mesh,u)
         if row.get('slick'):assert 'Slick' in [str(tag) for tag in a.tags],row['id']
         if data['config'].get('nanite'):assert editor.get_nanite_settings(mesh).enabled,row['id']
-    assert len(set(paths))==len(data['objects']),'Source objects share mesh assets'
-    assert len([n for n in labels if n.startswith('COD Brush_') or n.startswith('COD Patch_')])==len(data['objects'])
+    assert len(set(paths))==len(expected_rows),'Source objects share mesh assets'
+    assert len([n for n in labels if n.startswith('COD Brush_') or n.startswith('COD Patch_')])==len(expected_rows)
     for row in data['gameplay']['teleports']:
         a=labels['COD Teleport '+row['object_id']];assert a.get_attach_parent_actor()==labels['COD '+row['object_id']]
         if data['config'].get('profile')=='project_jump':
@@ -55,8 +61,8 @@ def main():
         assert a.get_editor_property('delay_seconds')==row['delay'] or abs(a.get_editor_property('delay_seconds')-row['delay'])<.00001
         assert a.get_editor_property('set_view')==row['set_view']
     move_verified=False
-    if len(data['objects'])>1:
-        a=labels['COD '+data['objects'][0]['id']];b=labels['COD '+data['objects'][1]['id']];p=a.get_actor_location();q=b.get_actor_location();children=a.get_attached_actors();before=[c.get_actor_location() for c in children];delta=u.Vector(100,0,0)
+    if len(expected_rows)>1:
+        a=labels['COD '+expected_rows[0]['id']];b=labels['COD '+expected_rows[1]['id']];p=a.get_actor_location();q=b.get_actor_location();children=a.get_attached_actors();before=[c.get_actor_location() for c in children];delta=u.Vector(100,0,0)
         try:
             a.set_actor_location(p+delta,False,False);assert (b.get_actor_location()-q).length()<.01
             for child,old in zip(children,before):assert (child.get_actor_location()-old-delta).length()<.01
