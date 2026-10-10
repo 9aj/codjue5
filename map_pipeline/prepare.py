@@ -8,6 +8,7 @@ import re
 
 from .geometry import cross, dot, reconstruct, sub
 from .hull import cloud_hull
+from .box_collision import exact_box
 from .parser import MapError, mesh_grid, numbers, parse
 
 TOOL = {'caulk','clip','playerclip','clip_player','trigger','ladder','nodraw','portal','hint','skip','weaponclip','clip_missile'}
@@ -139,7 +140,7 @@ def prepare(source,output,config=None):
     for directory in config.get('texture_roots',[]):
         dependencies.update({str(p.resolve()):digest(p) for p in Path(directory).rglob('*') if p.is_file() and p.suffix.lower() in ('.tga','.png','.jpg','.jpeg','.dds')})
     config_hash=hashlib.sha256(json.dumps({'config':config,'dependencies':dependencies},sort_keys=True).encode()).hexdigest()
-    fingerprint=hashlib.sha256((digest(source)+config_hash+'schema1').encode()).hexdigest()
+    fingerprint=hashlib.sha256((digest(source)+config_hash+'schema1-exact-box-v2').encode()).hexdigest()
     if (output/'manifest.json').exists():
         previous=json.loads((output/'manifest.json').read_text())
         if previous['fingerprint']!=fingerprint:
@@ -164,6 +165,7 @@ def prepare(source,output,config=None):
     for obj in objects:
         try:
             fallback=False
+            collision_box=None
             if obj['kind']=='brush':
                 sides=[(s['points'],s['material']) for s in obj['sides']]
                 try:verts,faces,planes=reconstruct(sides)
@@ -178,8 +180,8 @@ def prepare(source,output,config=None):
                 matched=[min(source_planes,key=lambda s:max(abs(dot(s[0],verts[i])-s[1]) for i in f)) for f in faces]
                 mats=[s[2]['material'] for s in matched]
                 uvs=[[brush_uv(verts[i],s[0],s[2]['texdef'],128) for i in f] for f,s in zip(faces,matched)]
-                box=(not fallback and len(verts)==8 and all(sum(abs(v)>1e-5 for v in n)==1 for n,_ in planes))
-                shape='box' if box else 'convex'
+                collision_box=exact_box([point_cm(v,scale) for v in verts], tolerance=0.001) if not fallback else None
+                shape='box' if collision_box else 'convex'
                 uv_mode='iw_repeat_projection'
             else:
                 width,height,verts,uvs,mat=mesh_grid(obj)
@@ -196,6 +198,9 @@ def prepare(source,output,config=None):
             center,size,triangles=emit_obj(output/filename,obj['id'],verts,faces,mats,uvs,scale,material_ids)
             if fallback:fallbacks.append(obj['id'])
             records.append({'id':obj['id'],'kind':obj['kind'],'index':obj['index'],'source_line':obj['line'],'entity_id':obj['entity_id'],'entity':obj['entity'],'obj':filename,'obj_sha256':digest(output/filename),'center_cm':center,'size_cm':size,'materials':list(dict.fromkeys(mats)),'collision':collision,'semantic':sem,'shape':shape,'tool_surface':all(tool_material(m) for m in mats),'fallback_hull':fallback,'triangles':triangles,'uv_mode':uv_mode,'layer':next((s[6:].strip('"') for _,s in obj['lines'] if s.startswith('layer ')),'')})
+            if collision_box:
+                collision_box['center']=[a-b for a,b in zip(collision_box['center'],center)]
+                records[-1]['collision_box']=collision_box
         except (ValueError,StopIteration,OverflowError) as exc:
             issues.append({'id':obj['id'],'source_line':obj['line'],'reason':str(exc) or type(exc).__name__})
     materials={}

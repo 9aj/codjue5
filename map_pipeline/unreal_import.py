@@ -28,6 +28,38 @@ def source_convex_collision(mesh):
     assert u.get_editor_subsystem(u.StaticMeshEditorSubsystem).get_convex_collision_count(mesh)==1
 
 
+def exact_box_collision(mesh, box):
+    """Use an analytic box, including rotation, rather than a triangulated hull."""
+    editor=u.get_editor_subsystem(u.StaticMeshEditorSubsystem)
+    editor.remove_collisions(mesh)
+    elem=u.KBoxElem()
+    elem.set_editor_property('center',u.Vector(*box['center']))
+    elem.set_editor_property('rotation',u.MathLibrary.make_rot_from_xy(u.Vector(*box['axes'][0]),u.Vector(*box['axes'][1])))
+    for key,value in zip(('x','y','z'),box['size']):elem.set_editor_property(key,value)
+    body=mesh.get_editor_property('body_setup')
+    agg=body.get_editor_property('agg_geom');agg.set_editor_property('box_elems',[elem])
+    body.set_editor_property('agg_geom',agg)
+    # Geometry Script commits/rebuilds the body and refreshes referencing components.
+    simple=u.GeometryScript_Collision.get_simple_collision_from_static_mesh(mesh)
+    u.GeometryScript_Collision.set_simple_collision_of_static_mesh(simple,mesh,u.GeometryScriptSetSimpleCollisionOptions())
+    assert editor.get_simple_collision_count(mesh)==1 and editor.get_convex_collision_count(mesh)==0
+
+
+def verify_box_collision(mesh, box):
+    from itertools import product
+    geometry=mesh.get_editor_property('body_setup').get_editor_property('agg_geom')
+    boxes=geometry.get_editor_property('box_elems')
+    assert len(boxes)==1 and not geometry.get_editor_property('convex_elems'),mesh.get_path_name()
+    elem=boxes[0]
+    center=elem.get_editor_property('center')
+    axes=u.MathLibrary.get_axes(elem.get_editor_property('rotation'))
+    size=[elem.get_editor_property(k) for k in ('x','y','z')]
+    actual=[center+sum((axis*(sign*length/2) for axis,sign,length in zip(axes,signs,size)),u.Vector(0,0,0)) for signs in product((-1,1),repeat=3)]
+    for signs in product((-1,1),repeat=3):
+        expected=u.Vector(*box['center'])+sum((u.Vector(*axis)*(sign*length/2) for axis,sign,length in zip(box['axes'],signs,box['size'])),u.Vector(0,0,0))
+        assert min((p-expected).length() for p in actual)<.01,'Box collision differs from source: '+mesh.get_path_name()
+
+
 def import_mesh(row,work,dest,materials,config):
     path=dest+'/Objects/SM_'+row['id']
     mesh=u.load_asset(path)
@@ -48,7 +80,9 @@ def import_mesh(row,work,dest,materials,config):
         # Trigger meshes need overlap shapes even though the source actor is hidden/nonblocking.
         if row['semantic']=='trigger':policy='box' if row['shape']=='box' else 'convex'
         editor.remove_collisions(mesh)
-        if policy in ('box','dop26'):
+        if policy=='box' and row.get('collision_box'):
+            exact_box_collision(mesh,row['collision_box'])
+        elif policy in ('box','dop26'):
             shape=u.ScriptingCollisionShapeType.BOX if policy=='box' else u.ScriptingCollisionShapeType.NDOP26
             assert editor.add_simple_collisions(mesh,shape)>=0
         elif policy=='convex':
@@ -67,6 +101,8 @@ def import_mesh(row,work,dest,materials,config):
     if config.get('profile')=='project_jump' and (row['collision']!='none' or row['semantic']=='trigger'):
         from map_pipeline.movement import inspect_mesh
         inspect_mesh(mesh,u)
+    if row['collision']=='box' and row.get('collision_box'):
+        verify_box_collision(mesh,row['collision_box'])
     return mesh
 
 

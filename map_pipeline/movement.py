@@ -31,3 +31,20 @@ def inspect_mesh(mesh, unreal):
     validate_shapes(counts, body.get_editor_property('collision_trace_flag') ==
                     unreal.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
     return counts
+
+
+def inspect_level(actors, unreal):
+    """Include hand-authored blocking meshes: missing shapes produce no CmWorld skip."""
+    results=[]
+    for actor in actors:
+        for component in actor.get_components_by_class(unreal.StaticMeshComponent):
+            if not component.static_mesh or component.get_collision_enabled()==unreal.CollisionEnabled.NO_COLLISION:
+                continue
+            if component.get_collision_response_to_channel(unreal.CollisionChannel.ECC_PAWN)!=unreal.CollisionResponseType.ECR_BLOCK:
+                continue
+            try:
+                counts=inspect_mesh(component.static_mesh,unreal)
+            except MapError as exc:
+                raise MapError(actor.get_actor_label()+': '+str(exc)) from exc
+            results.append(dict(actor=actor.get_actor_label(),mesh=component.static_mesh.get_path_name(),shapes=counts))
+    return results
